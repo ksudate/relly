@@ -2,21 +2,33 @@ package disk
 
 import "os"
 
-type DiskManager struct{
-  HeapFile *os.File
-  NextPageId uint64
+const PAGE_SIZE = 4096
+
+type DiskManager struct {
+	HeapFile   *os.File
+	NextPageId uint64
 }
 
-func New(h *os.File) (*DiskManager, error) {
-  return &DiskManager{h, 0}, nil
+func New(heapFile *os.File) (*DiskManager, error) {
+	// ファイルサイズの取得
+	heapFileInfo, err := heapFile.Stat()
+
+	if err != nil {
+		return nil, err
+	}
+
+	heapFileSize := heapFileInfo.Size()
+	nextPageId := heapFileSize / PAGE_SIZE
+
+	return &DiskManager{heapFile, uint64(nextPageId)}, nil
 }
 
-func Open(fileName string) (*DiskManager, error){
-  fp, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0755)
-  if err != nil {
-    panic(err)
-  }
-  return New(fp)
+func Open(fileName string) (*DiskManager, error) {
+	fp, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		panic(err)
+	}
+	return New(fp)
 }
 
 func (d *DiskManager) AllocatePage() {

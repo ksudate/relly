@@ -2,30 +2,62 @@ package disk
 
 import "os"
 
-type DiskManager struct{
-  HeapFile *os.File
-  NextPageId uint64
+const PAGE_SIZE = 4096
+
+type DiskManager struct {
+	HeapFile   *os.File
+	NextPageId uint64
 }
 
-func New(h *os.File) (*DiskManager, error) {
-  return &DiskManager{h, 0}, nil
+type PageId int
+
+func New(heapFile *os.File) (*DiskManager, error) {
+	// ファイルサイズの取得
+	heapFileInfo, err := heapFile.Stat()
+
+	if err != nil {
+		return nil, err
+	}
+
+	heapFileSize := heapFileInfo.Size()
+	nextPageId := heapFileSize / PAGE_SIZE
+
+	return &DiskManager{heapFile, uint64(nextPageId)}, nil
 }
 
-func Open(fileName string) (*DiskManager, error){
-  fp, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0755)
-  if err != nil {
-    panic(err)
-  }
-  return New(fp)
+func Open(fileName string) (*DiskManager, error) {
+	fp, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		panic(err)
+	}
+	return New(fp)
 }
 
-func (d *DiskManager) AllocatePage() {
+func (diskManager *DiskManager) AllocatePage() PageId {
+	pageId := diskManager.NextPageId
+	diskManager.NextPageId += 1
+
+	return PageId(pageId)
 }
 
-func (d *DiskManager) ReadPageData() {
+func (diskManager *DiskManager) WritePageData(pageId PageId, data []byte) error {
+	offset := PAGE_SIZE * pageId
+	_, err := diskManager.HeapFile.WriteAt(data, int64(offset))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (d *DiskManager) WritePageData() {
+func (diskManager *DiskManager) ReadPageData(pageId PageId, data []byte) error {
+	offset := PAGE_SIZE * pageId
+	_, err := diskManager.HeapFile.ReadAt(data, int64(offset))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // impl DiskManager {

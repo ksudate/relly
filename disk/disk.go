@@ -9,6 +9,8 @@ type DiskManager struct {
 	NextPageId uint64
 }
 
+type PageId int
+
 func New(heapFile *os.File) (*DiskManager, error) {
 	// ファイルサイズの取得
 	heapFileInfo, err := heapFile.Stat()
@@ -31,13 +33,31 @@ func Open(fileName string) (*DiskManager, error) {
 	return New(fp)
 }
 
-func (d *DiskManager) AllocatePage() {
+func (diskManager *DiskManager) AllocatePage() PageId {
+	pageId := diskManager.NextPageId
+	diskManager.NextPageId += 1
+
+	return PageId(pageId)
 }
 
-func (d *DiskManager) ReadPageData() {
+func (diskManager *DiskManager) WritePageData(pageId PageId, data []byte) error {
+	offset := PAGE_SIZE * pageId
+	_, err := diskManager.HeapFile.WriteAt(data, int64(offset))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (d *DiskManager) WritePageData() {
+func (diskManager *DiskManager) ReadPageData(pageId PageId, data []byte) error {
+	offset := PAGE_SIZE * pageId
+	_, err := diskManager.HeapFile.ReadAt(data, int64(offset))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // impl DiskManager {

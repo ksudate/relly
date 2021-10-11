@@ -1,6 +1,11 @@
 package buffer
 
-import "github.com/tmrekk121/relly/disk"
+import (
+	"fmt"
+
+	"github.com/getlantern/deepcopy"
+	"github.com/tmrekk121/relly/disk"
+)
 
 type Page [disk.PAGE_SIZE]byte
 type BufferId int
@@ -36,7 +41,7 @@ func (bufferPool *BufferPool) incrementId(bufferId BufferId) BufferId {
 	return BufferId(int(bufferId+1) % bufferPool.Size())
 }
 
-func (bufferPool *BufferPool) Evict() *BufferId {
+func (bufferPool *BufferPool) Evict() (BufferId, error) {
 	poolSize := bufferPool.Size()
 	consecutivePinned := 0
 
@@ -45,7 +50,7 @@ func (bufferPool *BufferPool) Evict() *BufferId {
 		frame := bufferPool.Buffers[nextVictimId]
 
 		if frame.UsageCount == 0 {
-			return &nextVictimId
+			return nextVictimId, nil
 		}
 
 		if frame.refCount == 0 {
@@ -54,7 +59,7 @@ func (bufferPool *BufferPool) Evict() *BufferId {
 		} else {
 			consecutivePinned += 1
 			if consecutivePinned >= poolSize {
-				return nil
+				return -1, fmt.Errorf("no bufferId")
 			}
 		}
 
@@ -83,4 +88,30 @@ func (BufferPoolManager *BufferPoolManager) FetchPage(pageId disk.PageId) (Buffe
 	}
 
 	// ページがバッファプールにない場合
+	bufferId, err := BufferPoolManager.Pool.Evict()
+	if err != nil {
+		return Buffer{}, err
+	}
+	frame := BufferPoolManager.Pool.Buffers[bufferId]
+	evictPageId := frame.Buffer.PageId
+	buffer := frame.Buffer
+	if buffer.IsDirty {
+		err = BufferPoolManager.Disk.WritePageData(evictPageId, buffer.Page[:])
+		if err != nil {
+			return Buffer{}, err
+		}
+	}
+	buffer.PageId = pageId
+	buffer.IsDirty = false
+	err = BufferPoolManager.Disk.ReadPageData(buffer.PageId, buffer.Page[:])
+	if err != nil {
+		return Buffer{}, err
+	}
+	frame.UsageCount = 1
+
+	page := Buffer{}
+	deepcopy.Copy(page, buffer)
+	delete(BufferPoolManager.PageTable, evictPageId)
+	BufferPoolManager.PageTable[pageId] = bufferId
+	return page, nil
 }
